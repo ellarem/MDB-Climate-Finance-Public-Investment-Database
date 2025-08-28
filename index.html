@@ -37,44 +37,75 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script>
-  // ✅ CSV is in the same folder as index.html
+  // CSV is next to index.html in the repo root
   const CSV_URL = "mdb_climate_finance.csv?v=" + Date.now();
-
   const statusEl = document.getElementById('status');
+
   function showStatus(msg, type = '') {
     statusEl.textContent = msg;
     statusEl.className = type || '';
+    console.log(msg);
   }
 
-  Papa.parse(CSV_URL, {
-    download: true,
-    header: true,
-    skipEmptyLines: 'greedy',
-    complete: function(result) {
-      const data = result.data || [];
-      if (!data.length) {
-        showStatus("No rows found in the CSV. Check the file path or contents.", "error");
-        return;
+  // 1) Verify the CSV is reachable
+  fetch(CSV_URL, { method: "HEAD" })
+    .then(res => {
+      if (!res.ok) {
+        throw new Error("HTTP " + res.status + " (check file name/path and Pages branch/folder)");
       }
+      // 2) Parse with Papa
+      Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        skipEmptyLines: "greedy",
+        // strip any leading blank lines that can break header detection
+        beforeFirstChunk: chunk => {
+          return chunk.replace(/^\uFEFF?(\s*\r?\n)+/, ""); // remove BOM + leading blank lines
+        },
+        complete: ({ data, meta, errors }) => {
+          if (errors && errors.length) {
+            console.error("Papa errors:", errors.slice(0, 5));
+          }
+          if (!data || !data.length) {
+            showStatus("CSV loaded but no rows found. Check that the first non-empty row is the header.", "error");
+            return;
+          }
+          const firstRow = data[0];
+          const keys = Object.keys(firstRow).filter(k => k && k !== "undefined");
+          if (!keys.length) {
+            showStatus("Could not detect headers. Ensure the first row contains column names.", "error");
+            return;
+          }
+          console.log("Detected columns:", keys);
 
-      const columns = Object.keys(data[0]).map(key => ({ title: key, data: key }))
-                                         .filter(c => c.title && c.title !== "undefined");
+          new DataTable("#mdbTable", {
+            data,
+            columns: keys.map(k => ({ title: k, data: k })),
+            pageLength: 25,
+            deferRender: true,
+            responsive: true,
+            layout: {
+              topStart: {
+                buttons: [
+                  { extend: "csvHtml5", title: "mdb_climate_finance", text: "Download CSV" },
+                  { extend: "excelHtml5", title: "mdb_climate_finance", text: "Download Excel" }
+                ]
+              }
+            }
+          });
 
-      new DataTable('#mdbTable', {
-        data,
-        columns: columns,
-        pageLength: 25,
-        deferRender: true,
-        responsive: true
+          showStatus(`Loaded ${data.length} rows.`, "sub");
+        },
+        error: (err, file, inputElem, reason) => {
+          console.error("Papa error:", err, reason);
+          showStatus("Error parsing CSV: " + (err?.message || reason || err), "error");
+        }
       });
-
-      showStatus("Loaded " + data.length + " rows.", "sub");
-    },
-    error: function(err) {
-      console.error(err);
-      showStatus("Error loading CSV: " + (err?.message || err), "error");
-    }
-  });
+    })
+    .catch(e => {
+      console.error(e);
+      showStatus("Could not load CSV: " + e.message, "error");
+    });
 </script>
 </body>
 </html>
