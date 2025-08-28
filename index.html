@@ -8,8 +8,8 @@
   <!-- jQuery (required for DataTables classic build) -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
-  <!-- DataTables CSS -->
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+  <!-- DataTables CSS (jQuery build) + Buttons -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
 
   <style>
@@ -19,73 +19,119 @@
     #status { margin: 10px 0 18px; font-size: 0.95rem; }
     #status.loading { color:#555; }
     #status.error { color:#b00020; }
+    table.dataTable thead th { position: sticky; top: 0; background: #fff; }
+    table.dataTable thead tr.filters th { position: sticky; top: 38px; background: #fff; z-index: 2; }
+    thead input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 4px 6px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+    }
     table.dataTable tbody tr { white-space: nowrap; }
     .dt-buttons { margin-bottom: 8px; }
   </style>
 </head>
 <body>
   <h1>MDB Climate Finance Public Investment Database</h1>
-  <div class="sub">Search, filter, and export the dataset below. Use the CSV/Excel buttons to download a copy.</div>
+  <div class="sub">Search, filter, and export the dataset below. Use the column filters or the global search. </div>
   <div id="status" class="loading">Loading data…</div>
 
-  <table id="mdbTable" class="display" style="width:100%"></table>
+  <table id="mdbTable" class="display" style="width:100%">
+    <thead id="tblHead"></thead>
+  </table>
 
   <!-- Papa Parse -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-  <!-- DataTables + Buttons (jQuery build) -->
-  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+  <!-- DataTables + Buttons (ORDER MATTERS) -->
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script>
-    // ✅ CSV is in the same folder as index.html (repo root)
+    // CSV sits next to index.html in the repo root
     const CSV_URL = "mdb_climate_finance.csv?v=" + Date.now();
-
     const statusEl = document.getElementById('status');
-    function showStatus(msg, type = '') {
-      statusEl.textContent = msg;
-      statusEl.className = type || '';
-      console.log(msg);
+    const showStatus = (msg, type='') => { statusEl.textContent = msg; statusEl.className = type; };
+
+    // Build a two-row THEAD: titles row + filters row
+    function buildThead(headers) {
+      const head = document.getElementById('tblHead');
+      const titleRow = document.createElement('tr');
+      const filterRow = document.createElement('tr');
+      filterRow.className = 'filters';
+
+      headers.forEach(h => {
+        const thTitle = document.createElement('th');
+        thTitle.textContent = h;
+        titleRow.appendChild(thTitle);
+
+        const thFilter = document.createElement('th');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Filter…';
+        input.setAttribute('data-col', h);
+        thFilter.appendChild(input);
+        filterRow.appendChild(thFilter);
+      });
+
+      head.innerHTML = '';
+      head.appendChild(titleRow);
+      head.appendChild(filterRow);
     }
 
+    // Load + render
     Papa.parse(CSV_URL, {
       download: true,
       header: true,
       skipEmptyLines: "greedy",
-      complete: function(result) {
-        const data = result.data || [];
-        if (!data.length) {
-          showStatus("No rows found in the CSV. Check the file path or contents.", "error");
-          return;
-        }
+      beforeFirstChunk: chunk => chunk.replace(/^\uFEFF?(\s*\r?\n)+/, ""),
+      complete: ({ data, errors }) => {
+        if (errors && errors.length) console.warn("Papa errors:", errors.slice(0,5));
+        if (!data || !data.length) { showStatus("CSV loaded but no rows found.", "error"); return; }
 
-        // Build columns from headers
-        const columns = Object.keys(data[0])
-          .filter(k => k && k !== "undefined")
-          .map(k => ({ title: k, data: k }));
+        // Figure headers from first row keys
+        const headers = Object.keys(data[0] || {}).filter(k => k && k !== "undefined");
+        const columns = headers.map(k => ({ title: k, data: k }));
 
-        // Render DataTable
-        $('#mdbTable').DataTable({
+        // Create thead with filter inputs
+        buildThead(headers);
+
+        // Init DataTable with column filters
+        const table = $('#mdbTable').DataTable({
           data,
           columns,
           pageLength: 25,
           deferRender: true,
           responsive: true,
+          orderCellsTop: true,
           dom: 'Bfrtip',
           buttons: [
             { extend: 'csvHtml5', title: 'mdb_climate_finance', text: 'Download CSV' },
             { extend: 'excelHtml5', title: 'mdb_climate_finance', text: 'Download Excel' }
-          ]
+          ],
+          initComplete: function () {
+            const api = this.api();
+            // Attach listeners to each input in the second header row
+            api.columns().every(function (colIdx) {
+              const th = $(api.table().header()).find('tr.filters th').eq(colIdx);
+              const input = $('input', th);
+              input.on('keyup change', function () {
+                const val = this.value;
+                if (api.column(colIdx).search() !== val) {
+                  api.column(colIdx).search(val, true, false).draw(); // regex true for flexible matching
+                }
+              });
+            });
+          }
         });
 
-        showStatus("Loaded " + data.length + " rows.", "sub");
+        showStatus(`Loaded ${data.length} rows.`, "sub");
       },
-      error: function(err) {
-        console.error(err);
-        showStatus("Error loading CSV: " + (err?.message || err), "error");
-      }
+      error: err => { console.error(err); showStatus("Error loading CSV: " + (err?.message || err), "error"); }
     });
   </script>
 </body>
