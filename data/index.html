@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MDB Climate Finance</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.7/css/dataTables.dataTables.min.css">
+</head>
+<body>
+  <table id="tbl" class="display" style="width:100%"></table>
+
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.datatables.net/2.0.7/js/dataTables.min.js"></script>
+  <script>
+    const url = "https://raw.githubusercontent.com/<org>/<repo>/main/data/mdb_climate_finance.csv";
+    Papa.parse(url, { download: true, header: true, complete: ({ data }) => {
+      const cols = Object.keys(data[0] || {}).map(k => ({ title: k, data: k }));
+      new DataTable('#tbl', { data, columns: cols, pageLength: 25, deferRender: true });
+    }});
+  </script>
+</body>
+</html>
