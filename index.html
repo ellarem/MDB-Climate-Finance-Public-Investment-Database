@@ -37,52 +37,44 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script>
-    // ✅ CSV is in the root of the repo
-   const CSV_URL = "https://raw.githubusercontent.com/ellarem/mdb-climate-finance-public-investment-database/main/mdb_climate_finance.csv?v=" + Date.now();
+  // ✅ CSV is in the same folder as index.html
+  const CSV_URL = "mdb_climate_finance.csv?v=" + Date.now();
 
-    const statusEl = document.getElementById('status');
-    function showStatus(msg, type = '') {
-      statusEl.textContent = msg;
-      statusEl.className = type || '';
-    }
+  const statusEl = document.getElementById('status');
+  function showStatus(msg, type = '') {
+    statusEl.textContent = msg;
+    statusEl.className = type || '';
+  }
 
-    Papa.parse(CSV_URL, {
-      download: true,
-      header: true,
-      skipEmptyLines: 'greedy',
-      complete: function(result) {
-        const data = result.data || [];
-        if (!data.length) {
-          showStatus("No rows found in the CSV. Check the file path or contents.", "error");
-          return;
-        }
-
-        const columns = Object.keys(data[0]).map(key => ({ title: key, data: key }))
-                                           .filter(c => c.title && c.title !== "undefined");
-
-        new DataTable('#mdbTable', {
-          data,
-          columns,
-          pageLength: 25,
-          deferRender: true,
-          responsive: true,
-          layout: {
-            topStart: {
-              buttons: [
-                { extend: 'csvHtml5', title: 'mdb_climate_finance', text: 'Download CSV' },
-                { extend: 'excelHtml5', title: 'mdb_climate_finance', text: 'Download Excel' }
-              ]
-            }
-          }
-        });
-
-        showStatus("Loaded " + data.length + " rows.", "sub");
-      },
-      error: function(err) {
-        console.error(err);
-        showStatus("Error loading CSV: " + (err?.message || err), "error");
+  Papa.parse(CSV_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: 'greedy',
+    complete: function(result) {
+      const data = result.data || [];
+      if (!data.length) {
+        showStatus("No rows found in the CSV. Check the file path or contents.", "error");
+        return;
       }
-    });
-  </script>
+
+      const columns = Object.keys(data[0]).map(key => ({ title: key, data: key }))
+                                         .filter(c => c.title && c.title !== "undefined");
+
+      new DataTable('#mdbTable', {
+        data,
+        columns: columns,
+        pageLength: 25,
+        deferRender: true,
+        responsive: true
+      });
+
+      showStatus("Loaded " + data.length + " rows.", "sub");
+    },
+    error: function(err) {
+      console.error(err);
+      showStatus("Error loading CSV: " + (err?.message || err), "error");
+    }
+  });
+</script>
 </body>
 </html>
