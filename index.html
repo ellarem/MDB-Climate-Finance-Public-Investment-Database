@@ -5,9 +5,12 @@
   <title>MDB Climate Finance Public Investment Database</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- DataTables core + Buttons extension -->
-  <link rel="stylesheet" href="https://cdn.datatables.net/2.0.7/css/dataTables.dataTables.min.css">
-  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/3.0.2/css/buttons.dataTables.min.css">
+  <!-- jQuery (required for DataTables classic build) -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
 
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
@@ -30,82 +33,60 @@
   <!-- Papa Parse -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-  <!-- DataTables + Buttons -->
-  <script src="https://cdn.datatables.net/2.0.7/js/dataTables.min.js"></script>
-  <script src="https://cdn.datatables.net/buttons/3.0.2/js/dataTables.buttons.min.js"></script>
-  <script src="https://cdn.datatables.net/buttons/3.0.2/js/buttons.html5.min.js"></script>
+  <!-- DataTables + Buttons (jQuery build) -->
+  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script>
-  // CSV is next to index.html in the repo root
-  const CSV_URL = "mdb_climate_finance.csv?v=" + Date.now();
-  const statusEl = document.getElementById('status');
+    // ✅ CSV is in the same folder as index.html (repo root)
+    const CSV_URL = "mdb_climate_finance.csv?v=" + Date.now();
 
-  function showStatus(msg, type = '') {
-    statusEl.textContent = msg;
-    statusEl.className = type || '';
-    console.log(msg);
-  }
+    const statusEl = document.getElementById('status');
+    function showStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = type || '';
+      console.log(msg);
+    }
 
-  // 1) Verify the CSV is reachable
-  fetch(CSV_URL, { method: "HEAD" })
-    .then(res => {
-      if (!res.ok) {
-        throw new Error("HTTP " + res.status + " (check file name/path and Pages branch/folder)");
-      }
-      // 2) Parse with Papa
-      Papa.parse(CSV_URL, {
-        download: true,
-        header: true,
-        skipEmptyLines: "greedy",
-        // strip any leading blank lines that can break header detection
-        beforeFirstChunk: chunk => {
-          return chunk.replace(/^\uFEFF?(\s*\r?\n)+/, ""); // remove BOM + leading blank lines
-        },
-        complete: ({ data, meta, errors }) => {
-          if (errors && errors.length) {
-            console.error("Papa errors:", errors.slice(0, 5));
-          }
-          if (!data || !data.length) {
-            showStatus("CSV loaded but no rows found. Check that the first non-empty row is the header.", "error");
-            return;
-          }
-          const firstRow = data[0];
-          const keys = Object.keys(firstRow).filter(k => k && k !== "undefined");
-          if (!keys.length) {
-            showStatus("Could not detect headers. Ensure the first row contains column names.", "error");
-            return;
-          }
-          console.log("Detected columns:", keys);
-
-          new DataTable("#mdbTable", {
-            data,
-            columns: keys.map(k => ({ title: k, data: k })),
-            pageLength: 25,
-            deferRender: true,
-            responsive: true,
-            layout: {
-              topStart: {
-                buttons: [
-                  { extend: "csvHtml5", title: "mdb_climate_finance", text: "Download CSV" },
-                  { extend: "excelHtml5", title: "mdb_climate_finance", text: "Download Excel" }
-                ]
-              }
-            }
-          });
-
-          showStatus(`Loaded ${data.length} rows.`, "sub");
-        },
-        error: (err, file, inputElem, reason) => {
-          console.error("Papa error:", err, reason);
-          showStatus("Error parsing CSV: " + (err?.message || reason || err), "error");
+    Papa.parse(CSV_URL, {
+      download: true,
+      header: true,
+      skipEmptyLines: "greedy",
+      complete: function(result) {
+        const data = result.data || [];
+        if (!data.length) {
+          showStatus("No rows found in the CSV. Check the file path or contents.", "error");
+          return;
         }
-      });
-    })
-    .catch(e => {
-      console.error(e);
-      showStatus("Could not load CSV: " + e.message, "error");
+
+        // Build columns from headers
+        const columns = Object.keys(data[0])
+          .filter(k => k && k !== "undefined")
+          .map(k => ({ title: k, data: k }));
+
+        // Render DataTable
+        $('#mdbTable').DataTable({
+          data,
+          columns,
+          pageLength: 25,
+          deferRender: true,
+          responsive: true,
+          dom: 'Bfrtip',
+          buttons: [
+            { extend: 'csvHtml5', title: 'mdb_climate_finance', text: 'Download CSV' },
+            { extend: 'excelHtml5', title: 'mdb_climate_finance', text: 'Download Excel' }
+          ]
+        });
+
+        showStatus("Loaded " + data.length + " rows.", "sub");
+      },
+      error: function(err) {
+        console.error(err);
+        showStatus("Error loading CSV: " + (err?.message || err), "error");
+      }
     });
-</script>
+  </script>
 </body>
 </html>
